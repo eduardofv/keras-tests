@@ -1,3 +1,4 @@
+import math
 import numpy as np
 from scipy import spatial
 import tensorflow as tf
@@ -24,20 +25,15 @@ def tf_canberra(a,b):
 #        dist += num/den
 #    return dist
 
-# Linear combinatios: 
-#  dat: data
-#  idx: indices of the data to be combined
-def linear_combination(dat,idx):
-    return sum( np.array([ dat[i] for i in idx ]))
-
 # Creates random permutation of the input_dimension indices for each output_dimension
 #  IOW: selects some of the input dimensions to be combined for each output
 def shuffle_indexes(input_dim,output_dim):
     idx = []
+    max_dims = int(math.floor(input_dim/2)+1) #proporcion de dimensiones a usar en la linearizacion
     for i in range(output_dim):
         indexes = range(input_dim)
         np.random.shuffle(indexes)
-        idx.append(indexes[0:3])
+        idx.append(indexes[0:max_dims])
     return idx
 
 def create_vectors(data,fun):
@@ -50,35 +46,45 @@ def create_vectors(data,fun):
             size = np.shape(labels)))
     return labels
 
+# Linear combination: 
+#  dat: data
+#  idx: indices of the data to be combined
+def linear_combination(dat,idx):
+    return sum( np.array([ dat[i] for i in idx ]))
 
+#Functions that can be used to generate the training set
 def linear(data,input_dim,output_dim):
-    return create_vectors(
-            data,
-            lambda dat:  (dat[0]+dat[1],dat[1]+dat[2],dat[0]+dat[1]+dat[2]))
-
-def quad_linear(data,input_dim,output_dim):
-    return create_vectors(
-            data,
-            lambda dat: (dat[0]*dat[1],dat[1]*dat[2],dat[0]+dat[1]+dat[2]))
-
-def quad(data,input_dim,output_dim):
-    return create_vectors(
-            data,
-            lambda dat: (dat[0]*dat[1],dat[1]*dat[2],dat[0]*dat[1]*dat[2]))
-
-def linearvec(data,input_dim,output_dim):
     indexes = shuffle_indexes(input_dim,output_dim)
+    print("Linear Indexes:")
+    print(indexes)
     labels = np.zeros((len(data),output_dim))
     for i,d in enumerate(data):
         for x in range(output_dim):
             labels[i][x] = linear_combination(d,indexes[x])
     return labels
 
+#  the 3x3 are always 3 inputs by 3 outputs
+def linear3x3(data,input_dim,output_dim):
+    return create_vectors(
+            data,
+            lambda dat:  (dat[0]+dat[1],dat[1]+dat[2],dat[0]+dat[1]+dat[2]))
+
+def quad_linear3x3(data,input_dim,output_dim):
+    return create_vectors(
+            data,
+            lambda dat: (dat[0]*dat[1],dat[1]*dat[2],dat[0]+dat[1]+dat[2]))
+
+def quad3x3(data,input_dim,output_dim):
+    return create_vectors(
+            data,
+            lambda dat: (dat[0]*dat[1],dat[1]*dat[2],dat[0]*dat[1]*dat[2]))
+
+
 #Params
-function_to_train = linearvec
+function_to_train = linear
 input_dim = 3
 output_dim = 3
-dense_layer_sizes = [30,30,30,30]
+dense_layer_sizes = [30]
 optimizer = 'rmsprop'
 loss = 'mse'#lambda x,y: tf_canberra(x,y)#'mse'#'cosine_proximity'
 training_set_size = 10000
@@ -120,9 +126,9 @@ print("\nScore: %f"%score)
 test_predicted = model.predict(test_data)
 dist_sum = 0
 for i,dat in enumerate(test_data):
-    #dist = spatial.distance.euclidean(test_labels[i],test_predicted[i])
+    dist = spatial.distance.euclidean(test_labels[i],test_predicted[i])
     #dist = spatial.distance.cosine(test_labels[i],test_predicted[i])
-    dist = tf_canberra(test_labels[i],test_predicted[i])
+    #dist = tf_canberra(test_labels[i],test_predicted[i])
     dist_sum += dist
     print("%s\t%s\t%s\t%.04f" % (
         str(dat),
