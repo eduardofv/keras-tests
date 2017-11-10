@@ -9,6 +9,7 @@ from keras.layers import Dense, Activation
 #Setup
 #np.random.seed(1234)
 np.set_printoptions(precision=3)
+USE_WEIGHTS = False
 ADD_RANDOM_NOISE = False
 RANDOM_NOISE_SCALE = 0.05
 
@@ -36,10 +37,12 @@ def shuffle_indexes(input_dim,output_dim):
         idx.append(indexes[0:max_dims])
     return idx
 
-def create_vectors(data,fun):
-    labels = np.zeros_like(data,dtype=np.float64)
+def create_vectors(data,indexes,weights,fun):
+    rows = np.shape(data)[0]
+    cols = len(indexes)
+    labels = np.zeros((rows,cols))
     for i,dat in enumerate(data):
-        labels[i] = fun(dat)
+        labels[i] = fun(dat,indexes,weights)
     if ADD_RANDOM_NOISE:
         labels = np.add(labels,np.random.normal(
             scale = RANDOM_NOISE_SCALE,
@@ -49,35 +52,38 @@ def create_vectors(data,fun):
 # Linear combination: 
 #  dat: data
 #  idx: indices of the data to be combined
-def linear_combination(dat,idx):
-    return sum( np.array([ dat[i] for i in idx ]))
+def linear_combination(dat,idx,weights):
+    return sum( [ weights[i]*dat[idx[i]] for i in range(len(idx)) ] )
 
 #Functions that can be used to generate the training set
-def linear(data,input_dim,output_dim):
-    indexes = shuffle_indexes(input_dim,output_dim)
-    print("Linear Indexes:")
-    print(indexes)
-    labels = np.zeros((len(data),output_dim))
-    for i,d in enumerate(data):
-        for x in range(output_dim):
-            labels[i][x] = linear_combination(d,indexes[x])
-    return labels
+def linear(data,indexes,weights):
+    return create_vectors(
+            data,
+            indexes,
+            weights,
+            lambda dat,idx,wei: [linear_combination(dat,idx[i],wei[i]) for i in range(len(idx))] )
 
 #  the 3x3 are always 3 inputs by 3 outputs
-def linear3x3(data,input_dim,output_dim):
+def linear3x3(data,indexes):
     return create_vectors(
             data,
-            lambda dat:  (dat[0]+dat[1],dat[1]+dat[2],dat[0]+dat[1]+dat[2]))
+            indexes,
+            weights,
+            lambda dat,indexes:  (dat[0]+dat[1],dat[1]+dat[2],dat[0]+dat[1]+dat[2]))
 
-def quad_linear3x3(data,input_dim,output_dim):
+def quad_linear3x3(data,indexes):
     return create_vectors(
             data,
-            lambda dat: (dat[0]*dat[1],dat[1]*dat[2],dat[0]+dat[1]+dat[2]))
+            indexes,
+            weights,
+            lambda dat,indexes: (dat[0]*dat[1],dat[1]*dat[2],dat[0]+dat[1]+dat[2]))
 
-def quad3x3(data,input_dim,output_dim):
+def quad3x3(data,indexes):
     return create_vectors(
             data,
-            lambda dat: (dat[0]*dat[1],dat[1]*dat[2],dat[0]*dat[1]*dat[2]))
+            indexes,
+            weights,
+            lambda dat,indexes: (dat[0]*dat[1],dat[1]*dat[2],dat[0]*dat[1]*dat[2]))
 
 
 #Params
@@ -89,9 +95,11 @@ optimizer = 'rmsprop'
 loss = 'mse'#lambda x,y: tf_canberra(x,y)#'mse'#'cosine_proximity'
 training_set_size = 10000
 test_set_size = 100
-epochs_to_train = 50
+epochs_to_train = 20
 
 #Process
+
+#  Create the Model
 sess = tf.Session()
 K.set_session(sess)
 
@@ -113,11 +121,23 @@ model.add( Dense(output_dim) )
 model.compile(optimizer=optimizer,
               loss=loss)
 
+#  Generate functions
+indexes = shuffle_indexes(input_dim,output_dim)
+if USE_WEIGHTS:
+    weights = np.random.rand(output_dim,input_dim) #en realidad solo se usa una fraccion de input_dim
+else:
+    weights = np.ones((output_dim,input_dim))
+
+print("Linear Indexes:")
+print(indexes)
+print("Linear Weights:")
+print(weights)
+ 
 train_data = np.random.random((training_set_size,input_dim))
-train_labels = function_to_train(train_data,input_dim,output_dim)
+train_labels = function_to_train(train_data,indexes,weights)
 
 test_data = np.random.random((test_set_size,input_dim))
-test_labels = function_to_train(test_data,input_dim,output_dim)
+test_labels = function_to_train(test_data,indexes,weights)
 
 model.fit(train_data, train_labels, epochs=epochs_to_train)
 score = model.evaluate(test_data,test_labels)
